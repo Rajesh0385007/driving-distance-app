@@ -24,7 +24,7 @@ AGENCY_MAP = {
     "E13 9AP": "Hillside Finance BRAC",
     "BD8 7DT": "S H Enterprise BRAC",
     "IG3 9UH": "Smart Safe Meghna Blue Limited BRAC",
-    "BB12 OAT": "Crescent Overseas & Money Transfer BRAC",
+    "BB12 0AT": "Crescent Overseas & Money Transfer BRAC",
     "E3 4JN": "Smart Safe FRJ Travels Limited BRAC"
 }
 
@@ -40,7 +40,7 @@ CITY_MAP = {
     "E13 9AP": "London",
     "BD8 7DT": "Bradford",
     "IG3 9UH": "Ilford",
-    "BB12 OAT": "Burnley",
+    "BB12 0AT": "Burnley",
     "E3 4JN": "London"
 }
 
