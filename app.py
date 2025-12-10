@@ -9,7 +9,7 @@ app = Flask(__name__)
 DESTINATIONS = [
     "E1 2PS", "LU4 8HZ", "B19 2TP", "OL9 6QA", "B10 0UN",
     "E2 0AA", "E1 1DT", "E13 9AP", "BD8 7DT", "IG3 9UH",
-    "BB12 OAT", "E3 4JN"
+    "BB12 0AT", "E3 4JN"
 ]
 
 # Mapping of postcode → agency name
