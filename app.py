@@ -9,7 +9,7 @@ app = Flask(__name__)
 DESTINATIONS = [
     "E1 2PS", "LU4 8HZ", "B19 2TP", "OL9 6QA", "B10 0UN",
     "E2 0AA", "E1 1DT", "E13 9AP", "BD8 7DT", "IG3 9UH",
-    "BB12 0AT", "E3 4JN"
+    "BB12 0AT", "E3 4JN", "NN1 4BH"
 ]
 
 # Mapping of postcode → agency name
@@ -25,7 +25,8 @@ AGENCY_MAP = {
     "BD8 7DT": "S H Enterprise BRAC",
     "IG3 9UH": "Smart Safe Meghna Blue Limited BRAC",
     "BB12 0AT": "Crescent Overseas & Money Transfer BRAC",
-    "E3 4JN": "Smart Safe FRJ Travels Limited BRAC"
+    "E3 4JN": "Smart Safe FRJ Travels Limited BRAC",
+    "NN1 4BH": "Ruhan Travel BRAC"
 }
 
 # Mapping of postcode → city
@@ -41,7 +42,8 @@ CITY_MAP = {
     "BD8 7DT": "Bradford",
     "IG3 9UH": "Ilford",
     "BB12 0AT": "Burnley",
-    "E3 4JN": "London"
+    "E3 4JN": "London",
+    "NN1 4BH": "Northampton"
 }
 
 PAGE = """
