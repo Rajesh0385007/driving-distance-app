@@ -2,50 +2,29 @@ from flask import Flask, request, render_template_string
 import requests
 import urllib.parse
 import pandas as pd
+import json
 
 app = Flask(__name__)
 
-# Fixed destination list
-DESTINATIONS = [
-    "E1 2PS", "LU4 8HZ", "B19 2TP", "OL9 6QA", "B10 0UN",
-    "E2 0AA", "E1 1DT", "E13 9AP", "BD8 7DT", "IG3 9UH",
-    "BB12 0AT", "E3 4JN", "NN1 4BH"
-]
+# =========================
+# LOAD STATIC DATA FROM JSON
+# =========================
+with open("destinations.json", "r") as f:
+    data = json.load(f)
 
-# Mapping of postcode → agency name
+DESTINATIONS = [d["postcode"] for d in data["destinations"]]
+
 AGENCY_MAP = {
-    "E1 2PS": "Smart Safe Kushiara BRAC",
-    "LU4 8HZ": "Smart Safe Islam Travels BRAC",
-    "B19 2TP": "Smart Safe BSEL BRAC",
-    "OL9 6QA": "PB Express BRAC",
-    "B10 0UN": "Euro Bangla Tours Ltd BRAC",
-    "E2 0AA": "Asia Bd Express Ltd BRAC",
-    "E1 1DT": "Smart Safe Standard Exchange BRAC",
-    "E13 9AP": "Hillside Finance BRAC",
-    "BD8 7DT": "S H Enterprise BRAC",
-    "IG3 9UH": "Smart Safe Meghna Blue Limited BRAC",
-    "BB12 0AT": "Crescent Overseas & Money Transfer BRAC",
-    "E3 4JN": "Smart Safe FRJ Travels Limited BRAC",
-    "NN1 4BH": "Ruhan Travel BRAC"
+    d["postcode"]: d["agency"] for d in data["destinations"]
 }
 
-# Mapping of postcode → city
 CITY_MAP = {
-    "E1 2PS": "London",
-    "LU4 8HZ": "Luton",
-    "B19 2TP": "Birmingham",
-    "OL9 6QA": "Oldham",
-    "B10 0UN": "Birmingham",
-    "E2 0AA": "London",
-    "E1 1DT": "London",
-    "E13 9AP": "London",
-    "BD8 7DT": "Bradford",
-    "IG3 9UH": "Ilford",
-    "BB12 0AT": "Burnley",
-    "E3 4JN": "London",
-    "NN1 4BH": "Northampton"
+    d["postcode"]: d["city"] for d in data["destinations"]
 }
 
+# =========================
+# HTML PAGE
+# =========================
 PAGE = """
 <!doctype html>
 <html>
@@ -64,7 +43,7 @@ PAGE = """
     <form method="post" action="/">
       <label>Origin Postcode:</label><br>
       <input name="Origin" placeholder="Enter Origin Postcode"><br><br>
-      <input type="Submit" value="Calculate">
+      <input type="submit" value="Calculate">
     </form>
 
     {% if error %}
@@ -98,8 +77,11 @@ PAGE = """
 </html>
 """
 
-def geocode(pc):
-    url = f"https://api.postcodes.io/postcodes/{urllib.parse.quote(pc)}"
+# =========================
+# HELPERS
+# =========================
+def geocode(postcode):
+    url = f"https://api.postcodes.io/postcodes/{urllib.parse.quote(postcode)}"
     r = requests.get(url).json()
     if r.get("status") != 200:
         return None
@@ -116,11 +98,14 @@ def get_route(lat1, lon1, lat2, lon2):
     route = r["routes"][0]
     return route["distance"] / 1000, route["duration"] / 60
 
+# =========================
+# ROUTE
+# =========================
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
 
-        # FILE UPLOAD BRANCH
+        # ===== FILE UPLOAD =====
         file = request.files.get("file")
         if file:
             try:
@@ -129,14 +114,13 @@ def index():
                 return render_template_string(PAGE, error="Invalid Excel file.")
 
             if "origin" not in df.columns:
-                return render_template_string(PAGE, error="Excel must contain a column named 'origin'.")
+                return render_template_string(PAGE, error="Excel must contain 'origin' column.")
 
             rows = []
 
             for origin_pc in df["origin"].dropna():
                 origin_pc = str(origin_pc).strip()
                 origin_coords = geocode(origin_pc)
-
                 if not origin_coords:
                     continue
 
@@ -163,7 +147,7 @@ def index():
 
             return render_template_string(PAGE, rows=rows)
 
-        # SINGLE ORIGIN INPUT BRANCH
+        # ===== SINGLE ORIGIN =====
         origin_pc = request.form.get("Origin", "").strip()
         if not origin_pc:
             return render_template_string(PAGE, error="Enter an origin or upload a file.")
@@ -198,5 +182,8 @@ def index():
 
     return render_template_string(PAGE)
 
+# =========================
+# RUN
+# =========================
 if __name__ == "__main__":
     app.run(debug=True)
