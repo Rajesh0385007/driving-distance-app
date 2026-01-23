@@ -1,0 +1,69 @@
+{
+  "destinations": [
+    {
+      "postcode": "E1 2PS",
+      "agency": "Smart Safe Kushiara BRAC",
+      "city": "London"
+    },
+    {
+      "postcode": "LU4 8HZ",
+      "agency": "Smart Safe Islam Travels BRAC",
+      "city": "Luton"
+    },
+    {
+      "postcode": "B19 2TP",
+      "agency": "Smart Safe BSEL BRAC",
+      "city": "Birmingham"
+    },
+    {
+      "postcode": "OL9 6QA",
+      "agency": "PB Express BRAC",
+      "city": "Oldham"
+    },
+    {
+      "postcode": "B10 0UN",
+      "agency": "Euro Bangla Tours Ltd BRAC",
+      "city": "Birmingham"
+    },
+    {
+      "postcode": "E2 0AA",
+      "agency": "Asia Bd Express Ltd BRAC",
+      "city": "London"
+    },
+    {
+      "postcode": "E1 1DT",
+      "agency": "Smart Safe Standard Exchange BRAC",
+      "city": "London"
+    },
+    {
+      "postcode": "E13 9AP",
+      "agency": "Hillside Finance BRAC",
+      "city": "London"
+    },
+    {
+      "postcode": "BD8 7DT",
+      "agency": "S H Enterprise BRAC",
+      "city": "Bradford"
+    },
+    {
+      "postcode": "IG3 9UH",
+      "agency": "Smart Safe Meghna Blue Limited BRAC",
+      "city": "Ilford"
+    },
+    {
+      "postcode": "BB12 0AT",
+      "agency": "Crescent Overseas & Money Transfer BRAC",
+      "city": "Burnley"
+    },
+    {
+      "postcode": "E3 4JN",
+      "agency": "Smart Safe FRJ Travels Limited BRAC",
+      "city": "London"
+    },
+    {
+      "postcode": "NN1 4BH",
+      "agency": "Ruhan Travel BRAC",
+      "city": "Northampton"
+    }
+  ]
+}
