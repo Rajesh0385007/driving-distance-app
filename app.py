@@ -7,6 +7,12 @@ import json
 app = Flask(__name__)
 
 # =========================
+# CONFIG
+# =========================
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB upload limit
+REQUEST_TIMEOUT = 10  # seconds
+
+# =========================
 # LOAD STATIC DATA FROM JSON
 # =========================
 with open("destinations.json", "r") as f:
@@ -14,13 +20,62 @@ with open("destinations.json", "r") as f:
 
 DESTINATIONS = [d["postcode"] for d in data["destinations"]]
 
-AGENCY_MAP = {
-    d["postcode"]: d["agency"] for d in data["destinations"]
-}
+AGENCY_MAP = {d["postcode"]: d["agency"] for d in data["destinations"]}
+CITY_MAP = {d["postcode"]: d["city"] for d in data["destinations"]}
 
-CITY_MAP = {
-    d["postcode"]: d["city"] for d in data["destinations"]
-}
+# =========================
+# HELPER FUNCTIONS
+# =========================
+def geocode(postcode):
+    try:
+        url = f"https://api.postcodes.io/postcodes/{urllib.parse.quote(postcode)}"
+        r = requests.get(url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+
+        if data.get("status") != 200:
+            return None
+
+        return data["result"]["latitude"], data["result"]["longitude"]
+
+    except Exception as e:
+        print(f"Geocode error for {postcode}: {e}")
+        return None
+
+
+def get_route(lat1, lon1, lat2, lon2):
+    try:
+        url = (
+            "https://router.project-osrm.org/route/v1/driving/"
+            f"{lon1},{lat1};{lon2},{lat2}?overview=false"
+        )
+
+        r = requests.get(url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+
+        if not data.get("routes"):
+            return None
+
+        route = data["routes"][0]
+        return route["distance"] / 1000, route["duration"] / 60
+
+    except Exception as e:
+        print(f"Route error: {e}")
+        return None
+
+
+# =========================
+# PRE-CACHE DESTINATION COORDINATES (IMPORTANT OPTIMIZATION)
+# =========================
+DEST_COORDS = {}
+for dest in DESTINATIONS:
+    coords = geocode(dest)
+    if coords:
+        DEST_COORDS[dest] = coords
+
+print("Destination coordinates cached:", len(DEST_COORDS))
+
 
 # =========================
 # HTML PAGE
@@ -32,7 +87,7 @@ PAGE = """
     <h2>Driving Distance Calculator</h2>
 
     <h3>Upload Excel File (Multiple Origins)</h3>
-    <form method="post" action="/" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data">
       <input type="file" name="file"><br><br>
       <input type="submit" value="Upload & Calculate">
     </form>
@@ -40,14 +95,14 @@ PAGE = """
     <br><hr><br>
 
     <h3>OR Enter Single Origin Postcode</h3>
-    <form method="post" action="/">
+    <form method="post">
       <label>Origin Postcode:</label><br>
       <input name="Origin" placeholder="Enter Origin Postcode"><br><br>
       <input type="submit" value="Calculate">
     </form>
 
     {% if error %}
-      <p style="color: red;">{{ error }}</p>
+      <p style="color:red;">{{ error }}</p>
     {% endif %}
 
     {% if rows %}
@@ -77,110 +132,103 @@ PAGE = """
 </html>
 """
 
-# =========================
-# HELPERS
-# =========================
-def geocode(postcode):
-    url = f"https://api.postcodes.io/postcodes/{urllib.parse.quote(postcode)}"
-    r = requests.get(url).json()
-    if r.get("status") != 200:
-        return None
-    return r["result"]["latitude"], r["result"]["longitude"]
-
-def get_route(lat1, lon1, lat2, lon2):
-    url = (
-        "https://router.project-osrm.org/route/v1/driving/"
-        f"{lon1},{lat1};{lon2},{lat2}?overview=false"
-    )
-    r = requests.get(url).json()
-    if not r.get("routes"):
-        return None
-    route = r["routes"][0]
-    return route["distance"] / 1000, route["duration"] / 60
 
 # =========================
-# ROUTE
+# MAIN ROUTE
 # =========================
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
 
-        # ===== FILE UPLOAD =====
-        file = request.files.get("file")
-        if file:
-            try:
-                df = pd.read_excel(file)
-            except Exception:
-                return render_template_string(PAGE, error="Invalid Excel file.")
+        try:
+            # ================= FILE UPLOAD =================
+            file = request.files.get("file")
 
-            if "origin" not in df.columns:
-                return render_template_string(PAGE, error="Excel must contain 'origin' column.")
+            if file and file.filename != "":
+                try:
+                    df = pd.read_excel(file, engine="openpyxl")
+                except Exception as e:
+                    return render_template_string(PAGE, error=f"Excel read error: {e}")
+
+                if "origin" not in df.columns:
+                    return render_template_string(
+                        PAGE,
+                        error="Excel must contain column named 'origin'"
+                    )
+
+                rows = []
+
+                for origin_pc in df["origin"].dropna():
+                    origin_pc = str(origin_pc).strip()
+                    origin_coords = geocode(origin_pc)
+
+                    if not origin_coords:
+                        continue
+
+                    for dest_pc, dest_coords in DEST_COORDS.items():
+
+                        route = get_route(
+                            origin_coords[0], origin_coords[1],
+                            dest_coords[0], dest_coords[1]
+                        )
+
+                        if route:
+                            dist_km, time_min = route
+                            rows.append({
+                                "origin": origin_pc,
+                                "dest": dest_pc,
+                                "agency": AGENCY_MAP.get(dest_pc, "Unknown"),
+                                "city": CITY_MAP.get(dest_pc, "Unknown"),
+                                "dist": f"{dist_km:.1f}",
+                                "time": f"{time_min:.1f}"
+                            })
+
+                return render_template_string(PAGE, rows=rows)
+
+            # ================= SINGLE ORIGIN =================
+            origin_pc = request.form.get("Origin", "").strip()
+
+            if not origin_pc:
+                return render_template_string(
+                    PAGE,
+                    error="Please enter an origin postcode or upload file."
+                )
+
+            origin_coords = geocode(origin_pc)
+
+            if not origin_coords:
+                return render_template_string(
+                    PAGE,
+                    error="Invalid origin postcode."
+                )
 
             rows = []
 
-            for origin_pc in df["origin"].dropna():
-                origin_pc = str(origin_pc).strip()
-                origin_coords = geocode(origin_pc)
-                if not origin_coords:
-                    continue
+            for dest_pc, dest_coords in DEST_COORDS.items():
 
-                for dest_pc in DESTINATIONS:
-                    dest_coords = geocode(dest_pc)
-                    if not dest_coords:
-                        continue
+                route = get_route(
+                    origin_coords[0], origin_coords[1],
+                    dest_coords[0], dest_coords[1]
+                )
 
-                    route = get_route(
-                        origin_coords[0], origin_coords[1],
-                        dest_coords[0], dest_coords[1]
-                    )
-
-                    if route:
-                        dist_km, time_min = route
-                        rows.append({
-                            "origin": origin_pc,
-                            "dest": dest_pc,
-                            "agency": AGENCY_MAP.get(dest_pc, "Unknown"),
-                            "city": CITY_MAP.get(dest_pc, "Unknown"),
-                            "dist": f"{dist_km:.1f}",
-                            "time": f"{time_min:.1f}"
-                        })
+                if route:
+                    dist_km, time_min = route
+                    rows.append({
+                        "origin": origin_pc,
+                        "dest": dest_pc,
+                        "agency": AGENCY_MAP.get(dest_pc, "Unknown"),
+                        "city": CITY_MAP.get(dest_pc, "Unknown"),
+                        "dist": f"{dist_km:.1f}",
+                        "time": f"{time_min:.1f}"
+                    })
 
             return render_template_string(PAGE, rows=rows)
 
-        # ===== SINGLE ORIGIN =====
-        origin_pc = request.form.get("Origin", "").strip()
-        if not origin_pc:
-            return render_template_string(PAGE, error="Enter an origin or upload a file.")
-
-        origin_coords = geocode(origin_pc)
-        if not origin_coords:
-            return render_template_string(PAGE, error="Invalid origin postcode.")
-
-        rows = []
-        for dest_pc in DESTINATIONS:
-            dest_coords = geocode(dest_pc)
-            if not dest_coords:
-                continue
-
-            route = get_route(
-                origin_coords[0], origin_coords[1],
-                dest_coords[0], dest_coords[1]
-            )
-
-            if route:
-                dist_km, time_min = route
-                rows.append({
-                    "origin": origin_pc,
-                    "dest": dest_pc,
-                    "agency": AGENCY_MAP.get(dest_pc, "Unknown"),
-                    "city": CITY_MAP.get(dest_pc, "Unknown"),
-                    "dist": f"{dist_km:.1f}",
-                    "time": f"{time_min:.1f}"
-                })
-
-        return render_template_string(PAGE, rows=rows)
+        except Exception as e:
+            return render_template_string(PAGE, error=f"Server Error: {e}")
 
     return render_template_string(PAGE)
+
 
 # =========================
 # RUN
