@@ -13,13 +13,12 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB upload limit
 REQUEST_TIMEOUT = 10  # seconds
 
 # =========================
-# LOAD STATIC DATA FROM JSON
+# LOAD DESTINATIONS FROM JSON
 # =========================
 with open("destinations.json", "r") as f:
     data = json.load(f)
 
 DESTINATIONS = [d["postcode"] for d in data["destinations"]]
-
 AGENCY_MAP = {d["postcode"]: d["agency"] for d in data["destinations"]}
 CITY_MAP = {d["postcode"]: d["city"] for d in data["destinations"]}
 
@@ -27,46 +26,36 @@ CITY_MAP = {d["postcode"]: d["city"] for d in data["destinations"]}
 # HELPER FUNCTIONS
 # =========================
 def geocode(postcode):
+    """Get latitude and longitude of a postcode."""
     try:
         url = f"https://api.postcodes.io/postcodes/{urllib.parse.quote(postcode)}"
         r = requests.get(url, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         data = r.json()
-
         if data.get("status") != 200:
             return None
-
         return data["result"]["latitude"], data["result"]["longitude"]
-
     except Exception as e:
         print(f"Geocode error for {postcode}: {e}")
         return None
 
-
 def get_route(lat1, lon1, lat2, lon2):
+    """Get driving distance (km) and duration (min) between two coordinates."""
     try:
-        url = (
-            "https://router.project-osrm.org/route/v1/driving/"
-            f"{lon1},{lat1};{lon2},{lat2}?overview=false"
-        )
-
+        url = f"https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
         r = requests.get(url, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         data = r.json()
-
         if not data.get("routes"):
             return None
-
         route = data["routes"][0]
         return route["distance"] / 1000, route["duration"] / 60
-
     except Exception as e:
         print(f"Route error: {e}")
         return None
 
-
 # =========================
-# PRE-CACHE DESTINATION COORDINATES (IMPORTANT OPTIMIZATION)
+# PRE-CACHE DESTINATION COORDINATES
 # =========================
 DEST_COORDS = {}
 for dest in DESTINATIONS:
@@ -74,11 +63,10 @@ for dest in DESTINATIONS:
     if coords:
         DEST_COORDS[dest] = coords
 
-print("Destination coordinates cached:", len(DEST_COORDS))
-
+print("Cached destination coordinates:", len(DEST_COORDS))
 
 # =========================
-# HTML PAGE
+# HTML TEMPLATE
 # =========================
 PAGE = """
 <!doctype html>
@@ -132,18 +120,17 @@ PAGE = """
 </html>
 """
 
-
 # =========================
 # MAIN ROUTE
 # =========================
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-
         try:
-            # ================= FILE UPLOAD =================
-            file = request.files.get("file")
+            rows = []
 
+            # ---------------- FILE UPLOAD ----------------
+            file = request.files.get("file")
             if file and file.filename != "":
                 try:
                     df = pd.read_excel(file, engine="openpyxl")
@@ -151,27 +138,17 @@ def index():
                     return render_template_string(PAGE, error=f"Excel read error: {e}")
 
                 if "origin" not in df.columns:
-                    return render_template_string(
-                        PAGE,
-                        error="Excel must contain column named 'origin'"
-                    )
-
-                rows = []
+                    return render_template_string(PAGE, error="Excel must contain column named 'origin'")
 
                 for origin_pc in df["origin"].dropna():
                     origin_pc = str(origin_pc).strip()
                     origin_coords = geocode(origin_pc)
-
                     if not origin_coords:
+                        print(f"Skipping invalid origin: {origin_pc}")
                         continue
 
                     for dest_pc, dest_coords in DEST_COORDS.items():
-
-                        route = get_route(
-                            origin_coords[0], origin_coords[1],
-                            dest_coords[0], dest_coords[1]
-                        )
-
+                        route = get_route(origin_coords[0], origin_coords[1], dest_coords[0], dest_coords[1])
                         if route:
                             dist_km, time_min = route
                             rows.append({
@@ -183,34 +160,21 @@ def index():
                                 "time": f"{time_min:.1f}"
                             })
 
+                if not rows:
+                    return render_template_string(PAGE, error="No valid routes found.")
                 return render_template_string(PAGE, rows=rows)
 
-            # ================= SINGLE ORIGIN =================
+            # ---------------- SINGLE ORIGIN ----------------
             origin_pc = request.form.get("Origin", "").strip()
-
             if not origin_pc:
-                return render_template_string(
-                    PAGE,
-                    error="Please enter an origin postcode or upload file."
-                )
+                return render_template_string(PAGE, error="Please enter an origin postcode or upload a file.")
 
             origin_coords = geocode(origin_pc)
-
             if not origin_coords:
-                return render_template_string(
-                    PAGE,
-                    error="Invalid origin postcode."
-                )
-
-            rows = []
+                return render_template_string(PAGE, error="Invalid origin postcode.")
 
             for dest_pc, dest_coords in DEST_COORDS.items():
-
-                route = get_route(
-                    origin_coords[0], origin_coords[1],
-                    dest_coords[0], dest_coords[1]
-                )
-
+                route = get_route(origin_coords[0], origin_coords[1], dest_coords[0], dest_coords[1])
                 if route:
                     dist_km, time_min = route
                     rows.append({
@@ -222,6 +186,8 @@ def index():
                         "time": f"{time_min:.1f}"
                     })
 
+            if not rows:
+                return render_template_string(PAGE, error="No valid routes found.")
             return render_template_string(PAGE, rows=rows)
 
         except Exception as e:
@@ -229,9 +195,8 @@ def index():
 
     return render_template_string(PAGE)
 
-
 # =========================
-# RUN
+# RUN APP
 # =========================
 if __name__ == "__main__":
     app.run(debug=True)
