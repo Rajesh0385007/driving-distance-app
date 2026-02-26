@@ -69,6 +69,16 @@
       "postcode": "SO14 0BY",
       "agency": "MD Perfect Solution Ltd BRAC",
       "city": "Southampton"
-    }    
+    },
+    {
+      "postcode": "CF11 6AH",
+      "agency": "Samirs Sarees Centre BRAC",
+      "city": "Cardiff"
+    },
+    {
+      "postcode": "M13 0RQ",
+      "agency": "Manchester Tours And Travels LTD BRAC",
+      "city": "Manchester"
+    }
   ]
 }
